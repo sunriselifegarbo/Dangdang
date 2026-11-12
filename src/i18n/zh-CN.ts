@@ -1,5 +1,6 @@
 export const zh = {
   editPinyin: '纠正拼音', customPinyin: '手动拼音', restorePinyin: '恢复自动拼音', save: '保存', pinyinHelp: '用空格分隔每个字的拼音，可输入声调。只影响显示，朗读仍读词语。',
+  choosePhoto: '从相册选择', takePhoto: '拍照', cropTitle: '裁剪识别区域', cropHelp: '调整四条边，尽量只保留词语表，去掉课文和页眉。', left: '左边', right: '右边', top: '上边', bottom: '下边', recognize: '开始识别', recognizing: '正在本机识别', ocrConfirm: '确认识别词语', ocrHint: '请检查错字，勾选要保留的词。可编辑、删除、合并或按空格拆分。确认前不会保存。', selectAll: '全选', delete: '删除', merge: '合并选中', split: '拆分', addToInput: '加入输入区', noOcrWords: '没有识别出词语，请重新裁剪或换一张清晰照片。', photoError: '无法处理这张图片，请选择清晰的照片，或在系统中检查相机权限。', ocrSelection: '选中词语', imageAlt: '待识别的课本照片',
   appName: '当当听写', description: '孩子的中文听写练习空间',
   nav: { home: '练习空间', words: '复习词库', history: '练习记录', settings: '偏好设置' },
   homeTitle: '准备练习', homeSubtitle: '把今天要练的词语放进来，按自己的节奏开始。',

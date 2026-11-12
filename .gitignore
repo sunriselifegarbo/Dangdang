@@ -3,3 +3,6 @@ dist/
 work/
 .DS_Store
 *.tsbuildinfo
+public/ocr/*.js
+public/ocr/LICENSE-*.txt
+!public/ocr/LICENSE-model.txt

@@ -2,12 +2,12 @@ import { db } from '../data/db'
 import { createWord, type Session, type Word, type WordSource } from '../domain/models'
 import { automaticPinyin } from '../domain/words'
 import { updateWordStat } from '../domain/mastery'
-export async function saveWords(texts: string[], source: WordSource = 'manual'): Promise<Word[]> {
+export async function saveWords(texts: string[], source: WordSource | ((text: string) => WordSource) = 'manual'): Promise<Word[]> {
   return db.transaction('rw', db.words, async () => {
     const result: Word[] = []
     for (const text of texts) {
       let word = await db.words.where('[language+text]').equals(['zh', text]).first()
-      if (!word) { word = createWord({ text, autoPinyin: automaticPinyin(text), source }); await db.words.add(word) }
+      if (!word) { word = createWord({ text, autoPinyin: automaticPinyin(text), source: typeof source === 'function' ? source(text) : source }); await db.words.add(word) }
       result.push(word)
     }
     return result

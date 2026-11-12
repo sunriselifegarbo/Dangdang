@@ -9,6 +9,7 @@ import { finishSession, saveWords } from './services/repository'
 import { hasChineseVoice, speak, speechHint, stopSpeaking } from './services/speech'
 import { loadSettings, saveSettings, type Settings } from './services/settings'
 import { zh } from './i18n/zh-CN'
+import { OcrImport } from './components/OcrImport'
 import { PinyinEditor } from './components/PinyinEditor'
 import './style.css'
 
@@ -19,6 +20,8 @@ function Home({ start, refresh, edit }: { start: (words: Word[]) => void; refres
   const [text, setText] = useState(''), [name, setName] = useState(''), [lists, setLists] = useState<WordList[]>([])
   const [counts, setCounts] = useState({ mastered: 0, missed: 0, unmastered: 0 }), [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [listening, setListening] = useState(false)
   const [allWords,setAllWords] = useState<Word[]>([])
+  const [ocr,setOcr] = useState(false)
+  const sources = useRef(new Map<string, 'photo' | 'voice'>())
   const recognition = useRef<Recognition | null>(null)
   const words = useMemo(() => splitWords(text), [text])
   const Constructor = (window as unknown as { webkitSpeechRecognition?: new () => Recognition }).webkitSpeechRecognition
@@ -31,24 +34,24 @@ function Home({ start, refresh, edit }: { start: (words: Word[]) => void; refres
     if (listening) { recognition.current?.stop(); return }
     if (!Constructor) return
     const rec = new Constructor(); recognition.current = rec; rec.lang = 'zh-CN'; rec.continuous = false; rec.interimResults = false
-    rec.onresult = e => { let extra = ''; for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) extra += e.results[i][0].transcript + '\n'; setText(t => t + (t ? '\n' : '') + extra) }
+    rec.onresult = e => { let extra = ''; for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) extra += e.results[i][0].transcript + '\n'; splitWords(extra).forEach(text => sources.current.set(text,'voice')); setText(t => t + (t ? '\n' : '') + extra) }
     rec.onerror = () => { setMessage(zh.permissionDenied); setListening(false) }; rec.onend = () => setListening(false)
     try { rec.start(); setListening(true) } catch { setMessage(zh.permissionDenied) }
   }
   function launch() {
     // iOS：必须在点击调用栈内启动首词朗读，不能等 IndexedDB 后再播放。
     speak(words[0], loadSettings().rate)
-    run(async () => start(await saveWords(words)))
+    run(async () => start(await saveWords(words, text => sources.current.get(text) ?? 'manual')))
   }
   return <><h1>{zh.homeTitle}</h1><p className="muted">{zh.homeSubtitle}</p>
     <div className="stats">{Object.entries(zh.status).map(([key, label]) => <article key={key}><strong>{counts[key as keyof typeof counts]}</strong><span>{label}</span></article>)}</div>
     <div className="columns"><section className="panel"><h2>{zh.inputTitle}</h2><p className="muted">{zh.inputHint}</p>
       <textarea aria-label={zh.inputTitle} value={text} onChange={e => setText(e.target.value)} placeholder={zh.placeholder}/>
       <p className="muted small">{zh.keyboardHint}<br/>{zh.scanHint}</p>
-      <div className="actions"><button className="primary grow" disabled={!words.length || busy} onClick={launch}>{zh.start}（{words.length} {zh.wordUnit}）</button>{Constructor && !standalone && <button onClick={dictate}>{listening ? zh.micStop : zh.mic}</button>}<button onClick={() => setMessage(zh.stageLater)}>{zh.photo}</button><button onClick={() => setText('')}>{zh.clear}</button></div>
-      <div className="actions"><input aria-label={zh.listName} placeholder={zh.listName} value={name} onChange={e => setName(e.target.value)}/><button disabled={!name.trim() || !words.length || busy} onClick={() => run(async () => { const saved = await saveWords(words); await db.wordLists.add(createWordList(name.trim(), saved.map(w => w.id))); setName(''); await reload(); setMessage(zh.saved) })}>{zh.saveList}</button></div>
+      <div className="actions"><button className="primary grow" disabled={!words.length || busy} onClick={launch}>{zh.start}（{words.length} {zh.wordUnit}）</button>{Constructor && !standalone && <button onClick={dictate}>{listening ? zh.micStop : zh.mic}</button>}<button onClick={() => setOcr(true)}>{zh.photo}</button><button onClick={() => setText('')}>{zh.clear}</button></div>
+      <div className="actions"><input aria-label={zh.listName} placeholder={zh.listName} value={name} onChange={e => setName(e.target.value)}/><button disabled={!name.trim() || !words.length || busy} onClick={() => run(async () => { const saved = await saveWords(words, text => sources.current.get(text) ?? 'manual'); await db.wordLists.add(createWordList(name.trim(), saved.map(w => w.id))); setName(''); await reload(); setMessage(zh.saved) })}>{zh.saveList}</button></div>
     </section><section className="panel"><h2>{zh.lists}</h2>{!lists.length ? <p className="empty muted">{zh.listEmpty}</p> : lists.map(list => <details key={list.id}><summary className="list-row">{list.name}<span>{list.wordIds.length} {zh.wordUnit}</span></summary><div className="actions"><button onClick={() => { const loaded = list.wordIds.map(id => allWords.find(w => w.id === id)).filter((w): w is Word => !!w); if (loaded.length) { speak(loaded[0].text, loadSettings().rate); start(loaded) } }}>{zh.start}</button>{list.wordIds.map(id => allWords.find(w => w.id === id)).filter((w): w is Word => !!w).map(word => <button key={word.id} onClick={() => edit(word)}>{word.text}<small>{displayPinyin(word)}</small></button>)}</div></details>)}</section></div>
-    <p role="status">{message}</p><p className="muted small">{zh.backupHint}</p></>
+    {ocr && <OcrImport close={() => setOcr(false)} saved={() => { reload().catch(() => setMessage(zh.error)) }} append={words => { words.forEach(text => sources.current.set(text,'photo')); setText(text => text + (text ? '\n' : '') + words.join('\n')) }}/>}<p role="status">{message}</p><p className="muted small">{zh.backupHint}</p></>
 }
 function Practice({ words, session, setSession, check, settings, edit }: { words: Word[]; session: Session; setSession: (s: Session) => void; check: () => void; settings: Settings; edit: (word: Word) => void }) {
   const [index, setIndex] = useState(0), [answer, setAnswer] = useState(false), [hint] = useState(speechHint)
