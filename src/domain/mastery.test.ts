@@ -11,8 +11,12 @@ describe('掌握规则', () => {
     }
     expect(updateWordStat(stat, 'wrong', 'normal', 4)).toMatchObject({ status: 'unmastered', streak: 0, wrongCount: 1 })
   })
-  it('未听写标记错过，不计错误或复习时间', () => {
-    expect(updateWordStat(initial, 'unwritten', 'normal', 5)).toEqual({ ...initial, status: 'missed' })
+  it('只有没有统计的新词未听写才标记错过', () => {
+    expect(updateWordStat(undefined, 'unwritten', 'normal', 5, 3, 'a')).toEqual({ ...initial, status: 'missed' })
+  })
+  it.each(['unmastered', 'missed', 'mastered'] as const)('已有 %s 的词未听写保持全部统计', status => {
+    const previous = { ...initial, status, streak: 2, wrongCount: 4, lastReviewedAt: 2 }
+    expect(updateWordStat(previous, 'unwritten', 'review', 5)).toEqual(previous)
   })
   it('普通听写正确不累计复习次数，可配置门槛', () => {
     expect(updateWordStat(initial, 'correct', 'normal', 1).streak).toBe(0)

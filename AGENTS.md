@@ -33,3 +33,9 @@ Vite + React + TypeScript、Dexie(IndexedDB)、vite-plugin-pwa、pinyin-pro、te
 - 阶段 5：设置、数据安全、移动端打磨。
 - 阶段 6：仅保留收尾：更新提示、离线验证、构建文件大小检查、完整真机验收清单。
 - 每阶段结束先在 Mac 运行 npm run dev，完成测试与构建，然后推送 main；阶段 1.5 上线后由用户在 iPad 验收，用户确认后才进入下一阶段。阶段 1.5 前不提前部署。
+
+## 用户补充授权与模型规则
+- 用户已授权后续阶段自动衔接，常规问题自行决定；不再逐阶段等待确认。每阶段仍测试、build、在 Mac 运行 dev 并推送 main。真机验收由用户醒来后进行，未实测项不得记为通过。
+- 未听写：无 WordStat 的新词进入 missed；已有统计保持原状态、streak、wrongCount、lastReviewedAt，历史记录 unwritten。优先级未掌握 > 错过的词 > 已掌握，不因未听写覆盖已有状态。
+- 仅三种复习类型的答对累计连胜，普通听写答对不累计。
+- 历史条目同时保存 wordId 和 textSnapshot；备份保留稳定 id，导入预览后合并，不清库或覆盖现有记录。text+language 去重在代码完成，除主键外不加唯一约束。
