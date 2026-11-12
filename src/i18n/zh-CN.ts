@@ -1,4 +1,5 @@
 export const zh = {
+  editPinyin: '纠正拼音', customPinyin: '手动拼音', restorePinyin: '恢复自动拼音', save: '保存', pinyinHelp: '用空格分隔每个字的拼音，可输入声调。只影响显示，朗读仍读词语。',
   appName: '当当听写', description: '孩子的中文听写练习空间',
   nav: { home: '练习空间', words: '复习词库', history: '练习记录', settings: '偏好设置' },
   homeTitle: '准备练习', homeSubtitle: '把今天要练的词语放进来，按自己的节奏开始。',

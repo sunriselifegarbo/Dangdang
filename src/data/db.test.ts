@@ -31,7 +31,7 @@ it('v1 升级回填历史快照，删除词后历史仍可显示', async () => {
   const db = new DangdangDB(name)
   const history = await db.sessions.get('s')
   expect(history?.items).toEqual([{ wordId: 'a', textSnapshot: '花朵', result: 'wrong' }, { wordId: 'deleted', textSnapshot: '', result: 'unwritten' }])
-  expect(await db.words.get('a')).toMatchObject({ language: 'zh', autoPinyin: '', source: 'manual', createdAt: 0 })
+  expect(await db.words.get('a')).toMatchObject({ language: 'zh', autoPinyin: 'huā duǒ', source: 'manual', createdAt: 0 })
   await db.words.delete('a')
   expect((await db.sessions.get('s'))?.items[0].textSnapshot).toBe('花朵')
   await db.words.bulkAdd([{ id: 'b', text: '重复', language: 'zh' }, { id: 'c', text: '重复', language: 'zh' }] as never[])

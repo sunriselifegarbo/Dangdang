@@ -1,6 +1,7 @@
+import { automaticPinyin } from '../domain/words'
 import Dexie, { type Table } from 'dexie'
 import type { Word, WordList, Session, WordStat } from '../domain/models'
-export const DATABASE_VERSION = 2
+export const DATABASE_VERSION = 3
 export class DangdangDB extends Dexie {
   words!: Table<Word, string>
   wordLists!: Table<WordList, string>
@@ -35,6 +36,7 @@ export class DangdangDB extends Dexie {
         stat.status ??= 'unmastered'; stat.streak ??= 0; stat.wrongCount ??= 0; stat.lastReviewedAt ??= null
       })
     })
+    this.version(3).stores({}).upgrade(tx => tx.table('words').toCollection().modify(word => { word.autoPinyin = automaticPinyin(word.text) }))
   }
 }
 export const db = new DangdangDB()
