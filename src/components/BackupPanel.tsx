@@ -1,0 +1,13 @@
+import { useState } from 'react'
+import { parseBackup, type Backup, type planMerge } from '../domain/backup'
+import { exportBackup, importBackup, previewBackup } from '../services/backup'
+import { zh } from '../i18n/zh-CN'
+type Plan=ReturnType<typeof planMerge>
+export function BackupPanel({changed}:{changed:()=>void}) {
+ const [preview,setPreview]=useState<{backup:Backup;plan:Plan}|null>(null),[message,setMessage]=useState(''),[busy,setBusy]=useState(false)
+ async function download(){setBusy(true);try{const backup=await exportBackup(),url=URL.createObjectURL(new Blob([JSON.stringify(backup,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='Dangdang-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}catch{setMessage(zh.error)}finally{setBusy(false)}}
+ async function choose(file?:File){if(!file)return;setBusy(true);setMessage('');setPreview(null);try{const backup=parseBackup(await file.text());setPreview({backup,plan:await previewBackup(backup)})}catch{setMessage(zh.backupInvalid)}finally{setBusy(false)}}
+ return <section className="panel"><h2>{zh.backupTitle}</h2><p className="muted">{zh.backupHint}</p><div className="actions"><button disabled={busy} onClick={download}>{zh.exportBackup}</button><label className="file-button">{zh.importBackup}<input disabled={busy} type="file" accept="application/json,.json" onChange={e=>{choose(e.target.files?.[0]);e.target.value=''}}/></label><button onClick={async()=>{try{if(!navigator.storage?.persist){setMessage(zh.persistUnavailable);return}setMessage(await navigator.storage.persist()?zh.persistGranted:zh.persistDenied)}catch{setMessage(zh.persistDenied)}}}>{zh.requestPersist}</button></div>
+ {preview&&<div className="import-preview"><h3>{zh.importPreview}</h3><p className="muted">{zh.importHint}</p>{([[zh.addWords,preview.plan.additions.words.length],[zh.addLists,preview.plan.additions.wordLists.length],[zh.addSessions,preview.plan.additions.sessions.length],[zh.addStats,preview.plan.additions.wordStats.length],[zh.conflicts,preview.plan.conflicts]] as const).map(([label,n])=><p key={label}>{label}：{n}</p>)}<div className="actions"><button className="primary" disabled={busy} onClick={async()=>{setBusy(true);try{await importBackup(preview.backup);setPreview(null);setMessage(zh.importDone);changed()}catch{setMessage(zh.error)}finally{setBusy(false)}}}>{zh.importConfirm}</button><button disabled={busy} onClick={()=>setPreview(null)}>{zh.cancel}</button></div></div>}
+ <p role="status">{message}</p></section>
+}
