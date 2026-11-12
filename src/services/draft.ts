@@ -1,0 +1,3 @@
+type SourceEntry=[string,'photo'|'voice']
+export function readDraft():{text:string;name:string;sources:SourceEntry[]}{try{const value=JSON.parse(localStorage.getItem('dangdang-draft')??'{}');return {text:typeof value?.text==='string'?value.text:'',name:typeof value?.name==='string'?value.name:'',sources:Array.isArray(value?.sources)?value.sources.filter((entry:unknown):entry is SourceEntry=>Array.isArray(entry)&&typeof entry[0]==='string'&&(entry[1]==='photo'||entry[1]==='voice')):[]}}catch{return {text:'',name:'',sources:[]}}}
+export function saveDraft(text:string,name:string,sources:SourceEntry[]){try{localStorage.setItem('dangdang-draft',JSON.stringify({text,name,sources}))}catch{/* 草稿失败不阻止练习，正式保存有独立错误提示。 */}}

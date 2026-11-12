@@ -1,5 +1,6 @@
 import { createWordStat } from './models'
 import type { ItemResult, SessionType, WordStat } from './models'
+export const WORD_STATUS_PRIORITY = { unmastered: 3, missed: 2, mastered: 1 } as const
 export const MASTERY_RULES = {
   requiredCorrectStreak: 3,
   reviewTypes: ['wrong-retry', 'missed-retry', 'review'] as readonly SessionType[],

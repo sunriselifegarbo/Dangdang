@@ -1,3 +1,4 @@
+import { WORD_STATUS_PRIORITY } from './mastery'
 import type { Session, SessionItem, Word, WordList, WordStat } from './models'
 export interface Backup { formatVersion: 1; exportedAt: number; words: Word[]; wordLists: WordList[]; sessions: Session[]; wordStats: WordStat[] }
 export type DataTables = Pick<Backup,'words'|'wordLists'|'sessions'|'wordStats'>
@@ -31,7 +32,7 @@ export function planMerge(incoming: Backup, current: DataTables) {
   for(const list of incoming.wordLists){if(listIds.has(list.id)){conflicts++;continue}additions.wordLists.push({...list,wordIds:[...new Set(list.wordIds.map(mapId))].filter(id=>byId.has(id))});listIds.add(list.id)}
   const sessionIds=new Set(current.sessions.map(s=>s.id))
   for(const session of incoming.sessions){if(sessionIds.has(session.id)){conflicts++;continue}additions.sessions.push({...session,items:session.items.map(item=>({...item,wordId:mapId(item.wordId)}))});sessionIds.add(session.id)}
-  const statIds=new Set(current.wordStats.map(s=>s.wordId)),priority={unmastered:3,missed:2,mastered:1}
+  const statIds=new Set(current.wordStats.map(s=>s.wordId)),priority=WORD_STATUS_PRIORITY
   for(const stat of [...incoming.wordStats].sort((a,b)=>priority[b.status]-priority[a.status])){const wordId=mapId(stat.wordId);if(statIds.has(wordId)||!byId.has(wordId)){conflicts++;continue}additions.wordStats.push({...stat,wordId});statIds.add(wordId)}
   return {additions,conflicts}
 }

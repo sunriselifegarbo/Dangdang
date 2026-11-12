@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { registerSW } from 'virtual:pwa-register'
 import { db } from './data/db'
 import { createSession, createSessionItem, createWordList, displayPinyin, type Session, type SessionType, type Word, type WordList } from './domain/models'
 import { splitWords } from './domain/words'
 import { finishSession, saveWords } from './services/repository'
-import { hasChineseVoice, speak, speechHint, stopSpeaking } from './services/speech'
+import { speak, speechHint, stopSpeaking } from './services/speech'
+import { readDraft, saveDraft } from './services/draft'
 import { loadSettings, saveSettings, type Settings } from './services/settings'
 import { zh } from './i18n/zh-CN'
+import { PwaStatus } from './components/PwaStatus'
 import { BackupPanel } from './components/BackupPanel'
 import { History } from './components/History'
 import { WordLibrary } from './components/WordLibrary'
@@ -17,14 +18,14 @@ import { PinyinEditor } from './components/PinyinEditor'
 import './style.css'
 
 document.title = zh.appName
-registerSW()
 type Recognition = { lang: string; continuous: boolean; interimResults: boolean; start(): void; stop(): void; onresult: ((e: { results: { [n: number]: { [n: number]: { transcript: string }; isFinal: boolean }; length: number }; resultIndex: number }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null }
 function Home({ start, refresh, edit }: { start: (words: Word[]) => void; refresh: number; edit: (word: Word) => void }) {
-  const [text, setText] = useState(''), [name, setName] = useState(''), [lists, setLists] = useState<WordList[]>([])
+  const [text, setText] = useState(() => readDraft().text), [name, setName] = useState(() => readDraft().name), [lists, setLists] = useState<WordList[]>([])
   const [counts, setCounts] = useState({ mastered: 0, missed: 0, unmastered: 0 }), [message, setMessage] = useState(''), [busy, setBusy] = useState(false), [listening, setListening] = useState(false)
   const [allWords,setAllWords] = useState<Word[]>([])
   const [ocr,setOcr] = useState(false)
-  const sources = useRef(new Map<string, 'photo' | 'voice'>())
+  const sources = useRef(new Map<string, 'photo' | 'voice'>(readDraft().sources))
+  useEffect(() => {saveDraft(text,name,[...sources.current])},[text,name])
   const recognition = useRef<Recognition | null>(null)
   const words = useMemo(() => splitWords(text), [text])
   const Constructor = (window as unknown as { webkitSpeechRecognition?: new () => Recognition }).webkitSpeechRecognition
@@ -57,9 +58,10 @@ function Home({ start, refresh, edit }: { start: (words: Word[]) => void; refres
     {ocr && <OcrImport close={() => setOcr(false)} saved={() => { reload().catch(() => setMessage(zh.error)) }} append={words => { words.forEach(text => sources.current.set(text,'photo')); setText(text => text + (text ? '\n' : '') + words.join('\n')) }}/>}<p role="status">{message}</p><p className="muted small"><NavLink to="/settings">{zh.backupHint}</NavLink></p></>
 }
 function Practice({ words, session, setSession, check, settings, edit }: { words: Word[]; session: Session; setSession: (s: Session) => void; check: () => void; settings: Settings; edit: (word: Word) => void }) {
-  const [index, setIndex] = useState(0), [answer, setAnswer] = useState(false), [hint] = useState(speechHint)
+  const [index, setIndex] = useState(0), [answer, setAnswer] = useState(false), [hint,setHint] = useState(speechHint)
   const navigate = useNavigate()
-  useEffect(() => { let lock: { release(): Promise<void> } | undefined; const acquire = async () => { if (document.visibilityState !== 'visible') return; try { lock = await (navigator as Navigator & { wakeLock?: { request(type: string): Promise<{ release(): Promise<void> }> } }).wakeLock?.request('screen') } catch { /* 不支持或系统低电量时仍可练习 */ } }; acquire(); document.addEventListener('visibilitychange', acquire); return () => { lock?.release().catch(() => {}); document.removeEventListener('visibilitychange', acquire); stopSpeaking() } }, [])
+  useEffect(() => { const refresh = () => setHint(speechHint()); window.speechSynthesis?.addEventListener('voiceschanged',refresh); return () => window.speechSynthesis?.removeEventListener('voiceschanged',refresh) }, [])
+  useEffect(() => { let lock: { release(): Promise<void> } | undefined; let active=true; const acquire = async () => { if (document.visibilityState !== 'visible') return; try { lock = await (navigator as Navigator & { wakeLock?: { request(type: string): Promise<{ release(): Promise<void> }> } }).wakeLock?.request('screen'); if(!active) await lock?.release() } catch { /* 不支持或系统低电量时仍可练习 */ } }; acquire(); document.addEventListener('visibilitychange', acquire); return () => { active=false; lock?.release().catch(() => {}); document.removeEventListener('visibilitychange', acquire); stopSpeaking() } }, [])
   function move(next: number) { setAnswer(false); setIndex(next); const items = session.items.map((item, i) => i === next && item.result === 'unwritten' ? { ...item, result: 'correct' as const } : item); setSession({ ...session, items }); if (settings.autoSpeak) speak(words[next].text, settings.rate) }
   function finish() { stopSpeaking(); check(); navigate('/check') }
   return <div className="practice"><div className="practice-top"><button onClick={() => { if (window.confirm(zh.leaveConfirm)) finish() }}>{zh.exit}</button><span>{index + 1} / {words.length}</span><button onClick={finish}>{zh.finish}</button></div>
@@ -73,11 +75,12 @@ function Check({ session, done, settings }: { session: Session; done: () => void
     <section className="panel">{items.map((item,index) => <div className="check-row" key={item.wordId}><strong>{item.textSnapshot}</strong><div className="actions">{Object.entries(zh.result).map(([key,label]) => <button aria-pressed={item.result === key} key={key} onClick={() => setItems(items.map((v,i) => i === index ? { ...v, result: key as typeof item.result } : v))}>{label}</button>)}</div></div>)}<button className="primary" disabled={busy} onClick={async () => { setBusy(true); try { await finishSession({ ...session, items }, settings.requiredStreak); done() } catch { setMessage(zh.error); setBusy(false) } }}>{zh.confirm}</button><p role="alert">{message}</p></section></>
 }
 function Preferences({ settings, change, changed }: { settings: Settings; change: (s: Settings) => void; changed: () => void }) {
-  const [error,setError] = useState('')
+  const [error,setError] = useState(''), [voiceHint,setVoiceHint] = useState(speechHint)
+  useEffect(() => { const refresh = () => setVoiceHint(speechHint()); window.speechSynthesis?.addEventListener('voiceschanged',refresh); return () => window.speechSynthesis?.removeEventListener('voiceschanged',refresh) }, [])
   function update(next: Settings) { try { change(next); setError('') } catch {setError(zh.settingsError)} }
   return <><h1>{zh.nav.settings}</h1><section className="panel">{(['showPinyin','autoSpeak'] as const).map(key => <label className="setting" key={key}>{zh[key]}<input type="checkbox" checked={settings[key]} onChange={e => update({ ...settings, [key]: e.target.checked })}/></label>)}<label className="setting">{zh.rate}<input type="range" min="0.5" max="1.2" step="0.1" value={settings.rate} onChange={e => update({ ...settings, rate: +e.target.value })}/>{settings.rate}</label>
   {(['repeats','interval','requiredStreak'] as const).map(key=><label className="setting" key={key}>{zh[key]}<input type="number" inputMode={key==='interval'?'decimal':'numeric'} min={key==='interval'?.2:1} max={key==='repeats'?5:key==='interval'?10:20} step={key==='interval'?.2:1} value={settings[key]} onChange={e=>{const value=+e.target.value;if(value>0)update({...settings,[key]:value})}}/></label>)}
-  <p className="muted">{!hasChineseVoice() && zh.voiceHelp}</p><p role="alert">{error}</p></section><BackupPanel changed={changed}/></>
+  <p className="muted">{voiceHint}</p><p role="alert">{error}</p></section><BackupPanel changed={changed}/></>
 }
 function App() {
   const [words, setWords] = useState<Word[]>([]), [session, setSession] = useState<Session | null>(null), [settings,setSettings] = useState(loadSettings), [refresh,setRefresh] = useState(0)
@@ -87,6 +90,6 @@ function App() {
   function done() { setSession(null); setWords([]); setRefresh(v => v + 1); navigate('/') }
   return <div className="shell"><header><div className="brand"><span className="brand-mark" aria-hidden="true">✦</span>{zh.appName}</div><span className="muted privacy">{zh.local}</span></header>
     {!session && <nav>{Object.entries(zh.nav).map(([key,label]) => <NavLink key={key} to={key === 'home' ? '/' : '/' + key}>{label}</NavLink>)}</nav>}
-    <main><Routes><Route path="/" element={<Home start={start} refresh={refresh} edit={setEditing}/>}/><Route path="/practice" element={session ? <Practice words={words} session={session} setSession={setSession} check={() => {}} settings={settings} edit={setEditing}/> : <Home start={start} refresh={refresh} edit={setEditing}/>}/><Route path="/check" element={session ? <Check session={session} done={done} settings={settings}/> : <Home start={start} refresh={refresh} edit={setEditing}/>}/><Route path="/settings" element={<Preferences settings={settings} changed={() => setRefresh(v=>v+1)} change={s => { saveSettings(s); setSettings(loadSettings()) }}/>}/><Route path="/words" element={<WordLibrary edit={setEditing} refresh={refresh} start={start}/>}/><Route path="/history" element={<History start={start}/>}/><Route path="*" element={<Home start={start} refresh={refresh} edit={setEditing}/>}/></Routes></main>{editing && <PinyinEditor word={editing} close={() => setEditing(null)} changed={updated => { setWords(current => current.map(w => w.id === updated.id ? updated : w)); setRefresh(v => v + 1) }}/>}</div>
+    <PwaStatus busy={!!session}/><main><Routes><Route path="/" element={<Home start={start} refresh={refresh} edit={setEditing}/>}/><Route path="/practice" element={session ? <Practice words={words} session={session} setSession={setSession} check={() => {}} settings={settings} edit={setEditing}/> : <Home start={start} refresh={refresh} edit={setEditing}/>}/><Route path="/check" element={session ? <Check session={session} done={done} settings={settings}/> : <Home start={start} refresh={refresh} edit={setEditing}/>}/><Route path="/settings" element={<Preferences settings={settings} changed={() => setRefresh(v=>v+1)} change={s => { saveSettings(s); setSettings(loadSettings()) }}/>}/><Route path="/words" element={<WordLibrary edit={setEditing} refresh={refresh} start={start}/>}/><Route path="/history" element={<History start={start}/>}/><Route path="*" element={<Home start={start} refresh={refresh} edit={setEditing}/>}/></Routes></main>{editing && <PinyinEditor word={editing} close={() => setEditing(null)} changed={updated => { setWords(current => current.map(w => w.id === updated.id ? updated : w)); setRefresh(v => v + 1) }}/>}</div>
 }
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><HashRouter><App/></HashRouter></React.StrictMode>)
